@@ -101,14 +101,14 @@
       <div class="bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 rounded-2xl p-6 md:p-8 text-white shadow-xl mb-6">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
           <span id="activeCourseBadge" class="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">
-            운영체제
+            과목 로드 중
           </span>
           <span id="activeScopeCount" class="text-xs text-indigo-100 font-medium">
-            총 0개 문제 로드됨
+            총 0개 문제
           </span>
         </div>
         <h2 id="activeScopeTitle" class="text-2xl md:text-3xl font-extrabold tracking-tight mb-2">
-          1주차: 운영체제 개요
+          주차를 선택하세요
         </h2>
         <p id="activeScopeDesc" class="text-sm text-indigo-100/90 leading-relaxed max-w-xl">
           선택한 범위의 문제를 집중적으로 풀거나, 과목 전체 주차를 통합하여 실전처럼 무작위 모의고사를 치를 수 있습니다.
@@ -167,7 +167,7 @@
       <div class="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-sm flex-1 flex flex-col justify-between">
         <div>
           <div class="text-[11px] font-bold text-indigo-600 mb-2 uppercase tracking-wider" id="currentQuestionOrigin">
-            운영체제 • 1주차
+            과목 • 주차
           </div>
           <h2 id="currentQuestionPrompt" class="text-lg md:text-xl font-bold text-slate-900 leading-snug mb-6">
             문제 지문이 여기에 로드됩니다.
@@ -175,7 +175,7 @@
 
           <!-- 보기 버튼 리스트 (1~4번) -->
           <div id="optionsContainer" class="space-y-3">
-            <!-- 동적으로 보기 4개가 주입됩니다 -->
+            <!-- 보기 4개가 주입됩니다 -->
           </div>
         </div>
 
@@ -208,20 +208,20 @@
         <i class="fa-solid fa-trophy"></i>
       </div>
       <h2 class="text-2xl font-extrabold text-slate-900 mb-1">학습 완료!</h2>
-      <p id="resultScopeText" class="text-xs text-slate-500 mb-6">운영체제 • 1주차</p>
+      <p id="resultScopeText" class="text-xs text-slate-500 mb-6">결과 요약</p>
 
       <div class="grid grid-cols-3 gap-3 w-full mb-6">
         <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
           <span class="block text-xs text-slate-400 font-medium">총 문항</span>
-          <span id="resTotalCount" class="text-xl font-extrabold text-slate-800">10</span>
+          <span id="resTotalCount" class="text-xl font-extrabold text-slate-800">0</span>
         </div>
         <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
           <span class="block text-xs text-emerald-600 font-medium">정답 수</span>
-          <span id="resCorrectCount" class="text-xl font-extrabold text-emerald-600">8</span>
+          <span id="resCorrectCount" class="text-xl font-extrabold text-emerald-600">0</span>
         </div>
         <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
           <span class="block text-xs text-indigo-600 font-medium">정답률</span>
-          <span id="resScorePct" class="text-xl font-extrabold text-indigo-600">80%</span>
+          <span id="resScorePct" class="text-xl font-extrabold text-indigo-600">0%</span>
         </div>
       </div>
 
@@ -261,7 +261,7 @@
   </div>
 
   <script>
-    // 상태 정의
+    // 전역 상태
     let state = {
       courses: [],
       currentCourseId: null,
@@ -279,7 +279,6 @@
     async function initApp() {
       let loadedSuccessfully = false;
 
-      // GitHub Pages의 questions.json 자동 로드 시도
       try {
         const response = await fetch('./questions.json', { cache: 'no-store' });
         if (response.ok) {
@@ -292,11 +291,10 @@
           }
         }
       } catch (err) {
-        console.warn("questions.json 불러오기 실패, 로컬 스토리지로 대체:", err);
+        console.warn("questions.json 로드 실패, 로컬 캐시로 대체:", err);
       }
 
       if (!loadedSuccessfully) {
-        // 로컬 스토리지에서 복구
         const local = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (local) {
           try {
@@ -307,11 +305,17 @@
         }
       }
 
-      // 기본 선택 설정
       if (state.courses.length > 0) {
-        state.currentCourseId = state.courses[0].id;
-        if (state.courses[0].weeks && state.courses[0].weeks.length > 0) {
-          state.currentWeekId = state.courses[0].weeks[0].id;
+        if (!state.currentCourseId || !state.courses.some(c => c.id === state.currentCourseId)) {
+          state.currentCourseId = state.courses[0].id;
+        }
+        const currentCourse = state.courses.find(c => c.id === state.currentCourseId);
+        if (currentCourse && currentCourse.weeks && currentCourse.weeks.length > 0) {
+          if (!state.currentWeekId || !currentCourse.weeks.some(w => w.id === state.currentWeekId)) {
+            state.currentWeekId = currentCourse.weeks[0].id;
+          }
+        } else {
+          state.currentWeekId = null;
         }
       }
 
@@ -335,7 +339,7 @@
       }
     }
 
-    // 2. 사이드바 및 대시보드 렌더링
+    // 2. 사이드바 렌더링 (과목명/주차명 인라인 수정 및 삭제 기능 탑재)
     function renderSidebar() {
       const tree = document.getElementById('courseTree');
       tree.innerHTML = '';
@@ -348,16 +352,25 @@
         const cHeader = document.createElement('div');
         cHeader.className = `flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition ${isCurrentCourse ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-100'}`;
         cHeader.innerHTML = `
-          <span class="flex items-center space-x-2 truncate">
+          <span class="flex items-center space-x-2 truncate flex-1">
             <i class="fa-solid fa-book-bookmark text-[10px]"></i>
             <span class="truncate">${c.name}</span>
           </span>
-          <button class="add-week-btn p-1 text-slate-400 hover:text-indigo-600" data-cid="${c.id}" title="주차 추가">
-            <i class="fa-solid fa-plus text-[10px]"></i>
-          </button>
+          <div class="flex items-center space-x-1 ml-1">
+            <button class="edit-course-btn p-1 text-slate-400 hover:text-indigo-600" data-cid="${c.id}" title="과목명 수정">
+              <i class="fa-solid fa-pen text-[10px]"></i>
+            </button>
+            <button class="add-week-btn p-1 text-slate-400 hover:text-indigo-600" data-cid="${c.id}" title="주차 추가">
+              <i class="fa-solid fa-plus text-[10px]"></i>
+            </button>
+            <button class="delete-course-btn p-1 text-slate-400 hover:text-rose-500" data-cid="${c.id}" title="과목 삭제">
+              <i class="fa-solid fa-trash text-[10px]"></i>
+            </button>
+          </div>
         `;
+
         cHeader.addEventListener('click', (e) => {
-          if (!e.target.closest('.add-week-btn')) {
+          if (!e.target.closest('button')) {
             state.currentCourseId = c.id;
             state.currentWeekId = (c.weeks && c.weeks.length > 0) ? c.weeks[0].id : null;
             renderSidebar();
@@ -374,16 +387,27 @@
           const wItem = document.createElement('div');
           wItem.className = `flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] cursor-pointer transition ${isCurrentWeek ? 'font-bold text-indigo-600 bg-indigo-50/60' : 'text-slate-500 hover:bg-slate-50'}`;
           wItem.innerHTML = `
-            <span class="truncate">${w.name}</span>
-            <span class="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-mono">${qCount}</span>
+            <span class="truncate flex-1">${w.name}</span>
+            <div class="flex items-center space-x-1.5 ml-1">
+              <span class="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-mono">${qCount}</span>
+              <button class="edit-week-btn text-slate-300 hover:text-indigo-600" data-cid="${c.id}" data-wid="${w.id}" title="주차명 수정">
+                <i class="fa-solid fa-pen text-[9px]"></i>
+              </button>
+              <button class="delete-week-btn text-slate-300 hover:text-rose-500" data-cid="${c.id}" data-wid="${w.id}" title="주차 삭제">
+                <i class="fa-solid fa-xmark text-[10px]"></i>
+              </button>
+            </div>
           `;
+
           wItem.addEventListener('click', (e) => {
-            e.stopPropagation();
-            state.currentCourseId = c.id;
-            state.currentWeekId = w.id;
-            renderSidebar();
-            renderDashboard();
-            closeDrawer();
+            if (!e.target.closest('button')) {
+              e.stopPropagation();
+              state.currentCourseId = c.id;
+              state.currentWeekId = w.id;
+              renderSidebar();
+              renderDashboard();
+              closeDrawer();
+            }
           });
           wList.appendChild(wItem);
         });
@@ -393,7 +417,11 @@
         tree.appendChild(cContainer);
       });
 
-      // 주차 추가 버튼 바인딩
+      bindSidebarActionButtons();
+    }
+
+    function bindSidebarActionButtons() {
+      // 주차 추가
       document.querySelectorAll('.add-week-btn').forEach(btn => {
         btn.onclick = (e) => {
           e.stopPropagation();
@@ -405,6 +433,79 @@
             course.weeks.push({ id: wid, name: name.trim(), questions: [] });
             state.currentCourseId = cid;
             state.currentWeekId = wid;
+            saveStateToStorage();
+            renderSidebar();
+            renderDashboard();
+          }
+        };
+      });
+
+      // 과목명 수정
+      document.querySelectorAll('.edit-course-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const cid = btn.getAttribute('data-cid');
+          const course = state.courses.find(x => x.id === cid);
+          const newName = prompt("변경할 과목명을 입력하세요:", course.name);
+          if (newName && newName.trim()) {
+            course.name = newName.trim();
+            saveStateToStorage();
+            renderSidebar();
+            renderDashboard();
+          }
+        };
+      });
+
+      // 과목 삭제
+      document.querySelectorAll('.delete-course-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const cid = btn.getAttribute('data-cid');
+          const course = state.courses.find(x => x.id === cid);
+          if (confirm(`'${course.name}' 과목과 포함된 모든 문제를 삭제하시겠습니까?`)) {
+            state.courses = state.courses.filter(x => x.id !== cid);
+            if (state.currentCourseId === cid) {
+              state.currentCourseId = state.courses[0]?.id || null;
+              state.currentWeekId = state.courses[0]?.weeks[0]?.id || null;
+            }
+            saveStateToStorage();
+            renderSidebar();
+            renderDashboard();
+          }
+        };
+      });
+
+      // 주차명 수정
+      document.querySelectorAll('.edit-week-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const cid = btn.getAttribute('data-cid');
+          const wid = btn.getAttribute('data-wid');
+          const course = state.courses.find(x => x.id === cid);
+          const week = course.weeks.find(x => x.id === wid);
+          const newName = prompt("변경할 주차/챕터명을 입력하세요:", week.name);
+          if (newName && newName.trim()) {
+            week.name = newName.trim();
+            saveStateToStorage();
+            renderSidebar();
+            renderDashboard();
+          }
+        };
+      });
+
+      // 주차 삭제
+      document.querySelectorAll('.delete-week-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const cid = btn.getAttribute('data-cid');
+          const wid = btn.getAttribute('data-wid');
+          const course = state.courses.find(x => x.id === cid);
+          const week = course.weeks.find(x => x.id === wid);
+          if (confirm(`'${week.name}'과 등록된 문제를 삭제하시겠습니까?`)) {
+            course.weeks = course.weeks.filter(x => x.id !== wid);
+            if (state.currentWeekId === wid) {
+              state.currentWeekId = course.weeks[0]?.id || null;
+            }
             saveStateToStorage();
             renderSidebar();
             renderDashboard();
@@ -440,7 +541,7 @@
       return (course.weeks || []).reduce((acc, w) => acc + (w.questions || []).length, 0);
     }
 
-    // 3. 퀴즈 실행 엔진
+    // 3. 퀴즈 풀이 엔진
     function startQuiz(mode) {
       const course = state.courses.find(c => c.id === state.currentCourseId);
       if (!course) return alert("선택된 과목이 없습니다.");
@@ -457,7 +558,6 @@
           (w.questions || []).forEach(q => list.push(JSON.parse(JSON.stringify(q))));
         });
         if (list.length === 0) return alert("과목에 등록된 문제가 없습니다.");
-        // 무작위 셔플
         list.sort(() => Math.random() - 0.5);
       } else if (mode === 'wrongOnly') {
         (course.weeks || []).forEach(w => {
@@ -473,7 +573,6 @@
       state.userAnswers = {};
       state.timerSeconds = 0;
 
-      // 뷰 전환
       document.getElementById('dashboardView').classList.add('hidden');
       document.getElementById('resultView').classList.add('hidden');
       document.getElementById('quizPlayView').classList.remove('hidden');
@@ -528,7 +627,6 @@
         container.appendChild(btn);
       });
 
-      // 해설 박스 노출
       const expBox = document.getElementById('explanationBox');
       if (hasAnswered) {
         document.getElementById('explanationText').innerText = q.explanation || "제공된 해설이 없습니다.";
@@ -537,7 +635,6 @@
         expBox.classList.add('hidden');
       }
 
-      // 조작 버튼 상태
       document.getElementById('prevQuestionBtn').disabled = (state.currentIndex === 0);
       document.getElementById('nextBtnText').innerText = (state.currentIndex === total - 1) ? "결과 보기" : "다음 문제";
     }
@@ -550,7 +647,6 @@
 
       if (index !== q.answer) {
         q.wrongCount = (q.wrongCount || 0) + 1;
-        // 원본 배열에도 오답 기록 반영
         recordWrongAnswer(q.id);
       }
       renderCurrentQuestion();
@@ -594,7 +690,7 @@
       document.getElementById('resScorePct').innerText = `${pct}%`;
     }
 
-    // 4. NotebookLM 텍스트 파싱 대량 등록
+    // 4. 문제 텍스트 대량 파싱
     document.getElementById('parseInputBtn').onclick = () => {
       const text = document.getElementById('rawQuestionInput').value.trim();
       if (!text) return alert("붙여넣은 퀴즈 내용이 없습니다.");
@@ -651,7 +747,7 @@
       }
     };
 
-    // 5. 프롬프트 모달 및 템플릿
+    // 5. NotebookLM 출제 프롬프트
     function updatePromptModalText() {
       const course = state.courses.find(c => c.id === state.currentCourseId);
       const cName = course ? course.name : "과목";
@@ -671,7 +767,7 @@
       document.getElementById('promptTemplateArea').innerText = prompt;
     }
 
-    // 6. JSON 백업 및 불러오기
+    // 6. JSON 백업 및 복원
     document.getElementById('exportJsonBtn').onclick = () => {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ courses: state.courses }, null, 2));
       const a = document.createElement('a');
@@ -701,7 +797,7 @@
       reader.readAsText(file);
     };
 
-    // 7. 키보드 단축키 지원 (1~4, Enter, 좌우 화살표)
+    // 7. 키보드 단축키
     window.addEventListener('keydown', (e) => {
       if (document.getElementById('quizPlayView').classList.contains('hidden')) return;
 
@@ -714,7 +810,7 @@
       }
     });
 
-    // 8. 모바일 서랍 및 기타 이벤트
+    // 8. 서랍 메뉴 및 모바일 인터랙션
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('drawerOverlay');
     function openDrawer() { sidebar.classList.remove('-translate-x-full'); overlay.classList.remove('hidden'); }
