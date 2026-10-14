@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>QuizMaster Suite - 강의별 스마트 퀴즈</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+    body { font-family: 'Pretendard', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col md:flex-row">
+
+  <!-- 모바일 상단 네비게이션 헤더 -->
+  <header class="md:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+    <div class="flex items-center space-x-3">
+      <button id="mobileMenuBtn" class="p-2 -ml-2 text-slate-600 hover:text-indigo-600 focus:outline-none">
+        <i class="fa-solid fa-bars text-xl"></i>
+      </button>
+      <span class="font-bold text-lg text-slate-900 tracking-tight">QuizMaster Suite</span>
+    </div>
+    <div class="flex items-center space-x-2">
+      <span id="mobileSyncBadge" class="text-xs bg-slate-100 text-slate-600 font-medium px-2 py-1 rounded-full">
+        <i class="fa-solid fa-arrows-rotate mr-1 text-[10px]"></i>동기화
+      </span>
+    </div>
+  </header>
+
+  <!-- 오버레이 (모바일 서랍용) -->
+  <div id="drawerOverlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30 hidden transition-opacity"></div>
+
+  <!-- 사이드바 (과목 & 주차 관리) -->
+  <aside id="sidebar" class="fixed md:static inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 flex flex-col transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out h-full shadow-lg md:shadow-none">
+    <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+      <div class="flex items-center space-x-2.5">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-100">
+          <i class="fa-solid fa-graduation-cap text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-slate-900 leading-tight">QuizMaster</h1>
+          <p class="text-[11px] text-slate-500 font-medium">강의 퀴즈 허브</p>
+        </div>
+      </div>
+      <button id="closeDrawerBtn" class="md:hidden text-slate-400 hover:text-slate-600 p-1">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <!-- 동기화 상태 표시 바 -->
+    <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs text-slate-600">
+      <span class="flex items-center space-x-1.5">
+        <span id="syncDot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span id="syncStatusText">GitHub 연동됨</span>
+      </span>
+      <button id="manualRefreshBtn" class="text-indigo-600 hover:text-indigo-700 font-medium text-[11px] flex items-center">
+        <i class="fa-solid fa-rotate-right mr-1"></i>새로고침
+      </button>
+    </div>
+
+    <!-- 과목 및 주차 목록 트리 -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-4">
+      <div>
+        <div class="flex items-center justify-between px-2 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <span>과목 목록</span>
+          <button id="addCourseBtn" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold">+ 과목 추가</button>
+        </div>
+        <div id="courseTree" class="space-y-1">
+          <!-- 동적으로 생성되는 과목 및 주차 목록 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 하단 유틸리티 메뉴 -->
+    <div class="p-3 border-t border-slate-200 space-y-1.5 bg-slate-50/50">
+      <button id="openPromptModalBtn" class="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg flex items-center space-x-2 transition">
+        <i class="fa-solid fa-wand-magic-sparkles text-amber-500"></i>
+        <span>NotebookLM 출제 프롬프트</span>
+      </button>
+      <button id="exportJsonBtn" class="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg flex items-center space-x-2 transition">
+        <i class="fa-solid fa-download text-emerald-600"></i>
+        <span>데이터 백업 (JSON 받기)</span>
+      </button>
+      <button id="importJsonBtn" class="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg flex items-center space-x-2 transition">
+        <i class="fa-solid fa-upload text-blue-600"></i>
+        <span>데이터 불러오기 (JSON)</span>
+      </button>
+      <input type="file" id="fileInput" accept=".json" class="hidden">
+    </div>
+  </aside>
+
+  <!-- 메인 뷰 컨테이너 -->
+  <main class="flex-1 flex flex-col min-h-screen md:min-h-0 overflow-y-auto">
+
+    <!-- 대시보드 화면 (과목/주차 요약 및 모드 선택) -->
+    <section id="dashboardView" class="p-4 md:p-8 max-w-4xl mx-auto w-full">
+      <div class="bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 rounded-2xl p-6 md:p-8 text-white shadow-xl mb-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <span id="activeCourseBadge" class="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">
+            운영체제
+          </span>
+          <span id="activeScopeCount" class="text-xs text-indigo-100 font-medium">
+            총 0개 문제 로드됨
+          </span>
+        </div>
+        <h2 id="activeScopeTitle" class="text-2xl md:text-3xl font-extrabold tracking-tight mb-2">
+          1주차: 운영체제 개요
+        </h2>
+        <p id="activeScopeDesc" class="text-sm text-indigo-100/90 leading-relaxed max-w-xl">
+          선택한 범위의 문제를 집중적으로 풀거나, 과목 전체 주차를 통합하여 실전처럼 무작위 모의고사를 치를 수 있습니다.
+        </p>
+
+        <!-- 모드 선택 버튼군 -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
+          <button id="startCurrentWeekBtn" class="bg-white text-indigo-700 hover:bg-indigo-50 font-bold px-4 py-3 rounded-xl shadow transition text-sm flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-play text-xs"></i>
+            <span>선택 주차 풀기</span>
+          </button>
+          <button id="startAllWeeksBtn" class="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold px-4 py-3 rounded-xl transition text-sm flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-layer-group text-xs"></i>
+            <span>과목 전체 총체적 풀기</span>
+          </button>
+          <button id="startWrongReviewBtn" class="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold px-4 py-3 rounded-xl transition text-sm flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-bookmark text-amber-300 text-xs"></i>
+            <span>오답 & 북마크 복습</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 신규 문제 대량 등록 영역 -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-base font-bold text-slate-900">문제 직접 등록 / 대량 파싱</h3>
+            <p class="text-xs text-slate-500">NotebookLM에서 생성된 퀴즈 텍스트를 그대로 붙여넣으면 현재 주차에 자동 저장됩니다.</p>
+          </div>
+          <button id="parseInputBtn" class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-sm">
+            파싱 및 추가
+          </button>
+        </div>
+        <textarea id="rawQuestionInput" rows="4" placeholder="예시)&#10;1. 운영체제의 이중 모드 목적은?&#10;① 동기/비동기 분리&#10;② 하드웨어 보호 및 안정성 유지&#10;③ UI 최적화&#10;④ 멀티태스킹 강제 종료&#10;정답: 2&#10;해설: 특권 명령 실행을 커널 모드로 제한하여 안정성을 보호합니다." class="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-700"></textarea>
+      </div>
+    </section>
+
+    <!-- 퀴즈 풀이 실행 화면 -->
+    <section id="quizPlayView" class="hidden flex-1 flex flex-col p-4 md:p-8 max-w-3xl mx-auto w-full">
+      <!-- 퀴즈 상단 바 -->
+      <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
+        <button id="exitQuizBtn" class="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center space-x-1">
+          <i class="fa-solid fa-chevron-left text-[10px]"></i>
+          <span>대시보드로 나가기</span>
+        </button>
+        <div class="flex items-center space-x-3 text-xs">
+          <span id="quizTimer" class="font-mono text-slate-500 font-medium">00:00</span>
+          <span id="quizCounter" class="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-bold">1 / 10</span>
+          <button id="bookmarkToggleBtn" class="text-slate-300 hover:text-amber-400 p-1 transition">
+            <i class="fa-solid fa-star text-base"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 문제 카드 영역 -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-sm flex-1 flex flex-col justify-between">
+        <div>
+          <div class="text-[11px] font-bold text-indigo-600 mb-2 uppercase tracking-wider" id="currentQuestionOrigin">
+            운영체제 • 1주차
+          </div>
+          <h2 id="currentQuestionPrompt" class="text-lg md:text-xl font-bold text-slate-900 leading-snug mb-6">
+            문제 지문이 여기에 로드됩니다.
+          </h2>
+
+          <!-- 보기 버튼 리스트 (1~4번) -->
+          <div id="optionsContainer" class="space-y-3">
+            <!-- 동적으로 보기 4개가 주입됩니다 -->
+          </div>
+        </div>
+
+        <!-- 해설 박스 (답안 선택 후 노출) -->
+        <div id="explanationBox" class="hidden mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 animate-fade-in">
+          <div class="flex items-center space-x-2 text-xs font-bold text-slate-700 mb-1">
+            <i class="fa-solid fa-circle-info text-indigo-600"></i>
+            <span>정답 해설</span>
+          </div>
+          <p id="explanationText" class="text-xs text-slate-600 leading-relaxed"></p>
+        </div>
+
+        <!-- 하단 조작 버튼 -->
+        <div class="flex items-center justify-between mt-8 pt-4 border-t border-slate-100">
+          <button id="prevQuestionBtn" class="text-xs font-medium text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1">
+            <i class="fa-solid fa-arrow-left"></i>
+            <span>이전 (←)</span>
+          </button>
+          <button id="nextQuestionBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl shadow-md shadow-indigo-100 transition flex items-center space-x-2">
+            <span id="nextBtnText">다음 문제</span>
+            <i class="fa-solid fa-arrow-right text-[10px]"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 결과 리포트 화면 -->
+    <section id="resultView" class="hidden flex-1 flex flex-col items-center justify-center p-4 md:p-8 max-w-xl mx-auto w-full text-center">
+      <div class="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-2xl mb-4 shadow-inner">
+        <i class="fa-solid fa-trophy"></i>
+      </div>
+      <h2 class="text-2xl font-extrabold text-slate-900 mb-1">학습 완료!</h2>
+      <p id="resultScopeText" class="text-xs text-slate-500 mb-6">운영체제 • 1주차</p>
+
+      <div class="grid grid-cols-3 gap-3 w-full mb-6">
+        <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+          <span class="block text-xs text-slate-400 font-medium">총 문항</span>
+          <span id="resTotalCount" class="text-xl font-extrabold text-slate-800">10</span>
+        </div>
+        <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+          <span class="block text-xs text-emerald-600 font-medium">정답 수</span>
+          <span id="resCorrectCount" class="text-xl font-extrabold text-emerald-600">8</span>
+        </div>
+        <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+          <span class="block text-xs text-indigo-600 font-medium">정답률</span>
+          <span id="resScorePct" class="text-xl font-extrabold text-indigo-600">80%</span>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-2.5 w-full">
+        <button id="retryWrongOnlyBtn" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-3 rounded-xl shadow transition">
+          틀린 문제만 다시 풀기
+        </button>
+        <button id="backToDashBtn" class="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-3 rounded-xl shadow transition">
+          대시보드로 돌아가기
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- NotebookLM 프롬프트 모달 창 -->
+  <div id="promptModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 border border-slate-100 flex flex-col">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid fa-wand-magic-sparkles text-amber-500"></i>
+          <h3 class="font-bold text-slate-900 text-base">NotebookLM 맞춤 프롬프트</h3>
+        </div>
+        <button id="closePromptModal" class="text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">
+        NotebookLM 채팅창에 아래 문구를 복사해 붙여넣으면, 앱에서 바로 인식할 수 있는 정형화된 포맷으로 출제됩니다.
+      </p>
+      <pre id="promptTemplateArea" class="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs font-mono text-slate-700 whitespace-pre-wrap flex-1 mb-4 select-all"></pre>
+      <button id="copyPromptBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-xl shadow transition flex items-center justify-center space-x-2">
+        <i class="fa-regular fa-copy"></i>
+        <span>프롬프트 복사하기</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // 상태 정의
+    let state = {
+      courses: [],
+      currentCourseId: null,
+      currentWeekId: null,
+      activeQuizList: [],
+      currentIndex: 0,
+      userAnswers: {},
+      timerSeconds: 0,
+      timerInterval: null
+    };
+
+    const LOCAL_STORAGE_KEY = 'quizmaster_suite_v1';
+
+    // 1. 초기 로드 및 GitHub questions.json 동기화
+    async function initApp() {
+      let loadedSuccessfully = false;
+
+      // GitHub Pages의 questions.json 자동 로드 시도
+      try {
+        const response = await fetch('./questions.json', { cache: 'no-store' });
+        if (response.ok) {
+          const serverData = await response.json();
+          if (serverData && Array.isArray(serverData.courses) && serverData.courses.length > 0) {
+            state.courses = serverData.courses;
+            saveStateToStorage();
+            updateSyncStatus(true, "GitHub 동기화 완료");
+            loadedSuccessfully = true;
+          }
+        }
+      } catch (err) {
+        console.warn("questions.json 불러오기 실패, 로컬 스토리지로 대체:", err);
+      }
+
+      if (!loadedSuccessfully) {
+        // 로컬 스토리지에서 복구
+        const local = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (local) {
+          try {
+            const parsed = JSON.parse(local);
+            state.courses = parsed.courses || [];
+            updateSyncStatus(false, "로컬 캐시 사용 중");
+          } catch(e) { console.error(e); }
+        }
+      }
+
+      // 기본 선택 설정
+      if (state.courses.length > 0) {
+        state.currentCourseId = state.courses[0].id;
+        if (state.courses[0].weeks && state.courses[0].weeks.length > 0) {
+          state.currentWeekId = state.courses[0].weeks[0].id;
+        }
+      }
+
+      renderSidebar();
+      renderDashboard();
+    }
+
+    function saveStateToStorage() {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ courses: state.courses }));
+    }
+
+    function updateSyncStatus(isLive, message) {
+      const dot = document.getElementById('syncDot');
+      const text = document.getElementById('syncStatusText');
+      if (isLive) {
+        dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+        text.innerText = message;
+      } else {
+        dot.className = "w-2 h-2 rounded-full bg-amber-500";
+        text.innerText = message;
+      }
+    }
+
+    // 2. 사이드바 및 대시보드 렌더링
+    function renderSidebar() {
+      const tree = document.getElementById('courseTree');
+      tree.innerHTML = '';
+
+      state.courses.forEach(c => {
+        const isCurrentCourse = c.id === state.currentCourseId;
+        const cContainer = document.createElement('div');
+        cContainer.className = "mb-2";
+
+        const cHeader = document.createElement('div');
+        cHeader.className = `flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition ${isCurrentCourse ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-100'}`;
+        cHeader.innerHTML = `
+          <span class="flex items-center space-x-2 truncate">
+            <i class="fa-solid fa-book-bookmark text-[10px]"></i>
+            <span class="truncate">${c.name}</span>
+          </span>
+          <button class="add-week-btn p-1 text-slate-400 hover:text-indigo-600" data-cid="${c.id}" title="주차 추가">
+            <i class="fa-solid fa-plus text-[10px]"></i>
+          </button>
+        `;
+        cHeader.addEventListener('click', (e) => {
+          if (!e.target.closest('.add-week-btn')) {
+            state.currentCourseId = c.id;
+            state.currentWeekId = (c.weeks && c.weeks.length > 0) ? c.weeks[0].id : null;
+            renderSidebar();
+            renderDashboard();
+          }
+        });
+
+        const wList = document.createElement('div');
+        wList.className = "pl-4 pr-1 mt-1 space-y-0.5 border-l border-slate-100 ml-3";
+
+        (c.weeks || []).forEach(w => {
+          const isCurrentWeek = w.id === state.currentWeekId && isCurrentCourse;
+          const qCount = (w.questions || []).length;
+          const wItem = document.createElement('div');
+          wItem.className = `flex items-center justify-between px-2 py-1.5 rounded-lg text-[11px] cursor-pointer transition ${isCurrentWeek ? 'font-bold text-indigo-600 bg-indigo-50/60' : 'text-slate-500 hover:bg-slate-50'}`;
+          wItem.innerHTML = `
+            <span class="truncate">${w.name}</span>
+            <span class="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-mono">${qCount}</span>
+          `;
+          wItem.addEventListener('click', (e) => {
+            e.stopPropagation();
+            state.currentCourseId = c.id;
+            state.currentWeekId = w.id;
+            renderSidebar();
+            renderDashboard();
+            closeDrawer();
+          });
+          wList.appendChild(wItem);
+        });
+
+        cContainer.appendChild(cHeader);
+        cContainer.appendChild(wList);
+        tree.appendChild(cContainer);
+      });
+
+      // 주차 추가 버튼 바인딩
+      document.querySelectorAll('.add-week-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const cid = btn.getAttribute('data-cid');
+          const name = prompt("추가할 주차/챕터명을 입력하세요 (예: 3주차 가상메모리):");
+          if (name && name.trim()) {
+            const course = state.courses.find(x => x.id === cid);
+            const wid = 'w_' + Date.now();
+            course.weeks.push({ id: wid, name: name.trim(), questions: [] });
+            state.currentCourseId = cid;
+            state.currentWeekId = wid;
+            saveStateToStorage();
+            renderSidebar();
+            renderDashboard();
+          }
+        };
+      });
+    }
+
+    function renderDashboard() {
+      const course = state.courses.find(c => c.id === state.currentCourseId);
+      const week = course ? (course.weeks || []).find(w => w.id === state.currentWeekId) : null;
+
+      if (!course) {
+        document.getElementById('activeCourseBadge').innerText = "과목 없음";
+        document.getElementById('activeScopeTitle').innerText = "과목을 생성하거나 선택하세요";
+        document.getElementById('activeScopeCount').innerText = "0개 문제";
+        return;
+      }
+
+      document.getElementById('activeCourseBadge').innerText = course.name;
+      if (week) {
+        document.getElementById('activeScopeTitle').innerText = week.name;
+        document.getElementById('activeScopeCount').innerText = `현재 주차: ${(week.questions || []).length}개 문항`;
+      } else {
+        document.getElementById('activeScopeTitle').innerText = "등록된 주차가 없습니다";
+        document.getElementById('activeScopeCount').innerText = `과목 전체: ${getTotalQuestionsInCourse(course)}개 문항`;
+      }
+
+      updatePromptModalText();
+    }
+
+    function getTotalQuestionsInCourse(course) {
+      return (course.weeks || []).reduce((acc, w) => acc + (w.questions || []).length, 0);
+    }
+
+    // 3. 퀴즈 실행 엔진
+    function startQuiz(mode) {
+      const course = state.courses.find(c => c.id === state.currentCourseId);
+      if (!course) return alert("선택된 과목이 없습니다.");
+
+      let list = [];
+      if (mode === 'currentWeek') {
+        const week = (course.weeks || []).find(w => w.id === state.currentWeekId);
+        if (!week || !week.questions || week.questions.length === 0) {
+          return alert("해당 주차에 등록된 문제가 없습니다.");
+        }
+        list = JSON.parse(JSON.stringify(week.questions));
+      } else if (mode === 'allWeeks') {
+        (course.weeks || []).forEach(w => {
+          (w.questions || []).forEach(q => list.push(JSON.parse(JSON.stringify(q))));
+        });
+        if (list.length === 0) return alert("과목에 등록된 문제가 없습니다.");
+        // 무작위 셔플
+        list.sort(() => Math.random() - 0.5);
+      } else if (mode === 'wrongOnly') {
+        (course.weeks || []).forEach(w => {
+          (w.questions || []).forEach(q => {
+            if (q.wrongCount > 0 || q.bookmarked) list.push(JSON.parse(JSON.stringify(q)));
+          });
+        });
+        if (list.length === 0) return alert("오답이나 북마크된 문제가 없습니다.");
+      }
+
+      state.activeQuizList = list;
+      state.currentIndex = 0;
+      state.userAnswers = {};
+      state.timerSeconds = 0;
+
+      // 뷰 전환
+      document.getElementById('dashboardView').classList.add('hidden');
+      document.getElementById('resultView').classList.add('hidden');
+      document.getElementById('quizPlayView').classList.remove('hidden');
+
+      startTimer();
+      renderCurrentQuestion();
+    }
+
+    function renderCurrentQuestion() {
+      const q = state.activeQuizList[state.currentIndex];
+      const total = state.activeQuizList.length;
+
+      document.getElementById('quizCounter').innerText = `${state.currentIndex + 1} / ${total}`;
+      document.getElementById('currentQuestionPrompt').innerText = `${state.currentIndex + 1}. ${q.prompt}`;
+      document.getElementById('bookmarkToggleBtn').innerHTML = `<i class="fa-${q.bookmarked ? 'solid text-amber-400' : 'regular'} fa-star text-base"></i>`;
+
+      const container = document.getElementById('optionsContainer');
+      container.innerHTML = '';
+
+      const hasAnswered = state.userAnswers.hasOwnProperty(state.currentIndex);
+      const selectedIndex = state.userAnswers[state.currentIndex];
+
+      q.options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        let styleClasses = "w-full text-left p-4 rounded-xl border text-sm font-medium transition flex items-center justify-between ";
+
+        if (!hasAnswered) {
+          styleClasses += "border-slate-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/30 text-slate-800";
+        } else {
+          if (idx === q.answer) {
+            styleClasses += "border-emerald-500 bg-emerald-50 text-emerald-900 font-bold ring-2 ring-emerald-400";
+          } else if (idx === selectedIndex) {
+            styleClasses += "border-rose-400 bg-rose-50 text-rose-900 font-bold";
+          } else {
+            styleClasses += "border-slate-100 bg-slate-50 text-slate-400 opacity-60";
+          }
+        }
+
+        btn.className = styleClasses;
+        btn.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <span class="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold">${idx + 1}</span>
+            <span>${opt}</span>
+          </div>
+          ${hasAnswered && idx === q.answer ? '<i class="fa-solid fa-check text-emerald-600 text-base"></i>' : ''}
+          ${hasAnswered && idx === selectedIndex && idx !== q.answer ? '<i class="fa-solid fa-xmark text-rose-500 text-base"></i>' : ''}
+        `;
+
+        if (!hasAnswered) {
+          btn.onclick = () => selectOption(idx);
+        }
+        container.appendChild(btn);
+      });
+
+      // 해설 박스 노출
+      const expBox = document.getElementById('explanationBox');
+      if (hasAnswered) {
+        document.getElementById('explanationText').innerText = q.explanation || "제공된 해설이 없습니다.";
+        expBox.classList.remove('hidden');
+      } else {
+        expBox.classList.add('hidden');
+      }
+
+      // 조작 버튼 상태
+      document.getElementById('prevQuestionBtn').disabled = (state.currentIndex === 0);
+      document.getElementById('nextBtnText').innerText = (state.currentIndex === total - 1) ? "결과 보기" : "다음 문제";
+    }
+
+    function selectOption(index) {
+      if (state.userAnswers.hasOwnProperty(state.currentIndex)) return;
+
+      state.userAnswers[state.currentIndex] = index;
+      const q = state.activeQuizList[state.currentIndex];
+
+      if (index !== q.answer) {
+        q.wrongCount = (q.wrongCount || 0) + 1;
+        // 원본 배열에도 오답 기록 반영
+        recordWrongAnswer(q.id);
+      }
+      renderCurrentQuestion();
+    }
+
+    function recordWrongAnswer(qid) {
+      state.courses.forEach(c => {
+        (c.weeks || []).forEach(w => {
+          (w.questions || []).forEach(q => {
+            if (q.id === qid) q.wrongCount = (q.wrongCount || 0) + 1;
+          });
+        });
+      });
+      saveStateToStorage();
+    }
+
+    function startTimer() {
+      clearInterval(state.timerInterval);
+      state.timerInterval = setInterval(() => {
+        state.timerSeconds++;
+        const mins = String(Math.floor(state.timerSeconds / 60)).padStart(2, '0');
+        const secs = String(state.timerSeconds % 60).padStart(2, '0');
+        document.getElementById('quizTimer').innerText = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function finishQuiz() {
+      clearInterval(state.timerInterval);
+      document.getElementById('quizPlayView').classList.add('hidden');
+      document.getElementById('resultView').classList.remove('hidden');
+
+      const total = state.activeQuizList.length;
+      let correct = 0;
+      state.activeQuizList.forEach((q, idx) => {
+        if (state.userAnswers[idx] === q.answer) correct++;
+      });
+
+      const pct = Math.round((correct / total) * 100);
+      document.getElementById('resTotalCount').innerText = total;
+      document.getElementById('resCorrectCount').innerText = correct;
+      document.getElementById('resScorePct').innerText = `${pct}%`;
+    }
+
+    // 4. NotebookLM 텍스트 파싱 대량 등록
+    document.getElementById('parseInputBtn').onclick = () => {
+      const text = document.getElementById('rawQuestionInput').value.trim();
+      if (!text) return alert("붙여넣은 퀴즈 내용이 없습니다.");
+
+      const course = state.courses.find(c => c.id === state.currentCourseId);
+      const week = course ? (course.weeks || []).find(w => w.id === state.currentWeekId) : null;
+      if (!week) return alert("문제를 추가할 주차를 먼저 생성하거나 선택하세요.");
+
+      const blocks = text.split(/\n\s*(?=\d+[\.\)])/g);
+      let added = 0;
+
+      blocks.forEach(block => {
+        const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length < 5) return;
+
+        let prompt = lines[0].replace(/^\d+[\.\)]\s*/, '');
+        let options = [];
+        let answer = 0;
+        let explanation = "";
+
+        lines.slice(1).forEach(l => {
+          if (/^[①②③④1-4][\.\)]?\s*/.test(l)) {
+            options.push(l.replace(/^[①②③④1-4][\.\)]?\s*/, ''));
+          } else if (l.includes('정답:')) {
+            const numMatch = l.match(/\d/);
+            if (numMatch) answer = parseInt(numMatch[0]) - 1;
+          } else if (l.includes('해설:')) {
+            explanation = l.replace(/.*해설:\s*/, '');
+          }
+        });
+
+        if (options.length >= 2) {
+          week.questions.push({
+            id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            prompt,
+            options,
+            answer: Math.max(0, Math.min(answer, options.length - 1)),
+            explanation: explanation || "상세 해설 없음",
+            bookmarked: false,
+            wrongCount: 0
+          });
+          added++;
+        }
+      });
+
+      if (added > 0) {
+        saveStateToStorage();
+        renderDashboard();
+        renderSidebar();
+        document.getElementById('rawQuestionInput').value = '';
+        alert(`${added}개의 문제가 성공적으로 추가되었습니다!`);
+      } else {
+        alert("문제를 인식하지 못했습니다. 번호 및 보기 포맷을 확인하세요.");
+      }
+    };
+
+    // 5. 프롬프트 모달 및 템플릿
+    function updatePromptModalText() {
+      const course = state.courses.find(c => c.id === state.currentCourseId);
+      const cName = course ? course.name : "과목";
+      const wName = (course && course.weeks) ? (course.weeks.find(w => w.id === state.currentWeekId)?.name || "특정 단원") : "특정 단원";
+
+      const prompt = `강의 자료 [${cName} - ${wName}] 내용을 기반으로 핵심 4지선다형 객관식 퀴즈 10문항을 출제해줘.
+
+[출력 양식]
+1. 질문 내용
+① 보기1
+② 보기2
+③ 보기3
+④ 보기4
+정답: 번호
+해설: 정답의 원문 근거와 오답 이유`;
+
+      document.getElementById('promptTemplateArea').innerText = prompt;
+    }
+
+    // 6. JSON 백업 및 불러오기
+    document.getElementById('exportJsonBtn').onclick = () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ courses: state.courses }, null, 2));
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = "questions.json";
+      a.click();
+    };
+
+    document.getElementById('importJsonBtn').onclick = () => document.getElementById('fileInput').click();
+    document.getElementById('fileInput').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          if (parsed && Array.isArray(parsed.courses)) {
+            state.courses = parsed.courses;
+            saveStateToStorage();
+            initApp();
+            alert("퀴즈 데이터를 정상적으로 불러왔습니다!");
+          }
+        } catch(err) {
+          alert("올바르지 않은 JSON 파일입니다.");
+        }
+      };
+      reader.readAsText(file);
+    };
+
+    // 7. 키보드 단축키 지원 (1~4, Enter, 좌우 화살표)
+    window.addEventListener('keydown', (e) => {
+      if (document.getElementById('quizPlayView').classList.contains('hidden')) return;
+
+      if (['1', '2', '3', '4'].includes(e.key)) {
+        selectOption(parseInt(e.key) - 1);
+      } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+        document.getElementById('nextQuestionBtn').click();
+      } else if (e.key === 'ArrowLeft') {
+        document.getElementById('prevQuestionBtn').click();
+      }
+    });
+
+    // 8. 모바일 서랍 및 기타 이벤트
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('drawerOverlay');
+    function openDrawer() { sidebar.classList.remove('-translate-x-full'); overlay.classList.remove('hidden'); }
+    function closeDrawer() { sidebar.classList.add('-translate-x-full'); overlay.classList.add('hidden'); }
+
+    document.getElementById('mobileMenuBtn').onclick = openDrawer;
+    document.getElementById('closeDrawerBtn').onclick = closeDrawer;
+    overlay.onclick = closeDrawer;
+
+    document.getElementById('manualRefreshBtn').onclick = () => { initApp(); alert("최신 데이터를 다시 동기화했습니다."); };
+    document.getElementById('startCurrentWeekBtn').onclick = () => startQuiz('currentWeek');
+    document.getElementById('startAllWeeksBtn').onclick = () => startQuiz('allWeeks');
+    document.getElementById('startWrongReviewBtn').onclick = () => startQuiz('wrongOnly');
+    document.getElementById('exitQuizBtn').onclick = () => {
+      clearInterval(state.timerInterval);
+      document.getElementById('quizPlayView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+    };
+    document.getElementById('prevQuestionBtn').onclick = () => {
+      if (state.currentIndex > 0) { state.currentIndex--; renderCurrentQuestion(); }
+    };
+    document.getElementById('nextQuestionBtn').onclick = () => {
+      if (state.currentIndex < state.activeQuizList.length - 1) {
+        state.currentIndex++;
+        renderCurrentQuestion();
+      } else {
+        finishQuiz();
+      }
+    };
+    document.getElementById('backToDashBtn').onclick = () => {
+      document.getElementById('resultView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+    };
+    document.getElementById('retryWrongOnlyBtn').onclick = () => startQuiz('wrongOnly');
+
+    document.getElementById('openPromptModalBtn').onclick = () => document.getElementById('promptModal').classList.remove('hidden');
+    document.getElementById('closePromptModal').onclick = () => document.getElementById('promptModal').classList.add('hidden');
+    document.getElementById('copyPromptBtn').onclick = () => {
+      navigator.clipboard.writeText(document.getElementById('promptTemplateArea').innerText);
+      alert("프롬프트가 클립보드에 복사되었습니다!");
+      document.getElementById('promptModal').classList.add('hidden');
+    };
+
+    document.getElementById('addCourseBtn').onclick = () => {
+      const name = prompt("새 과목명을 입력하세요 (예: 컴퓨터네트워크):");
+      if (name && name.trim()) {
+        const id = 'c_' + Date.now();
+        state.courses.push({ id, name: name.trim(), weeks: [] });
+        state.currentCourseId = id;
+        state.currentWeekId = null;
+        saveStateToStorage();
+        renderSidebar();
+        renderDashboard();
+      }
+    };
+
+    // 진입점 실행
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>

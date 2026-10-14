@@ -1,0 +1,90 @@
+{
+  "courses": [
+    {
+      "id": "os",
+      "name": "운영체제 (OS)",
+      "weeks": [
+        {
+          "id": "os_w1",
+          "name": "1주차: 운영체제 개요 및 이중 모드",
+          "questions": [
+            {
+              "id": "q101",
+              "prompt": "운영체제가 하드웨어와 사용자 프로그램 사이에서 자원을 안전하게 보호하기 위해 CPU 지원을 받아 사용하는 두 가지 모드는?",
+              "options": [
+                "동기 모드(Synchronous)와 비동기 모드(Asynchronous)",
+                "사용자 모드(User Mode)와 커널 모드(Kernel Mode)",
+                "단일 모드(Single Mode)와 멀티 모드(Multi Mode)",
+                "선점 모드(Preemptive)와 비선점 모드(Non-preemptive)"
+              ],
+              "answer": 1,
+              "explanation": "CPU는 Privilege bit를 두어 일반 애플리케이션이 실행되는 사용자 모드와 특권 명령(I/O, 메모리 직접 접근 등)을 실행할 수 있는 커널(보호) 모드로 분리하여 시스템을 보호합니다.",
+              "bookmarked": false,
+              "wrongCount": 0
+            },
+            {
+              "id": "q102",
+              "prompt": "사용자 모드에서 실행 중인 프로세스가 운영체제의 핵심 서비스(예: 파일 읽기/쓰기, 네트워크 통신)를 요청하기 위해 호출하는 인터페이스는?",
+              "options": [
+                "컴파일러(Compiler)",
+                "시스템 콜(System Call)",
+                "인터럽트 벡터(Interrupt Vector)",
+                "레지스터(Register)"
+              ],
+              "answer": 1,
+              "explanation": "시스템 콜(System Call)은 사용자 프로그램이 커널에 특정 서비스 수행을 요청할 수 있는 진입점이자 인터페이스 역할을 합니다.",
+              "bookmarked": false,
+              "wrongCount": 0
+            }
+          ]
+        },
+        {
+          "id": "os_w2",
+          "name": "2주차: 프로세스와 스레드",
+          "questions": [
+            {
+              "id": "q201",
+              "prompt": "동일한 프로세스 내에서 생성된 멀티 스레드(Multi-thread) 간에 서로 공유하지 않고 '독립적'으로 보유하는 자원은?",
+              "options": [
+                "코드 영역 (Code / Text Section)",
+                "데이터 영역 (Data Section)",
+                "힙 영역 (Heap Section)",
+                "스택 영역 및 레지스터 상태 (Stack & Registers)"
+              ],
+              "answer": 3,
+              "explanation": "스레드들은 부모 프로세스의 코드, 데이터, 힙, 열린 파일 등의 자원을 공유하지만, 독립적인 함수 호출 흐름과 실행 상태를 유지하기 위해 각자 고유한 스택(Stack)과 레지스터(PC 포함)를 가집니다.",
+              "bookmarked": false,
+              "wrongCount": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "algo",
+      "name": "자료구조 및 알고리즘",
+      "weeks": [
+        {
+          "id": "algo_w1",
+          "name": "1주차: 복잡도 분석과 정렬",
+          "questions": [
+            {
+              "id": "q301",
+              "prompt": "평균 시간 복잡도는 O(N log N)이지만, 이미 정렬되어 있거나 피벗이 최악으로 선택될 경우 O(N^2)으로 저하될 수 있는 정렬 알고리즘은?",
+              "options": [
+                "병합 정렬 (Merge Sort)",
+                "힙 정렬 (Heap Sort)",
+                "퀵 정렬 (Quick Sort)",
+                "기수 정렬 (Radix Sort)"
+              ],
+              "answer": 2,
+              "explanation": "퀵 정렬(Quick Sort)은 평균적으로 매우 빠르지만, 분할이 한쪽으로 극단적으로 치우칠 경우 O(N^2)의 최악 시간 복잡도를 가집니다.",
+              "bookmarked": false,
+              "wrongCount": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
