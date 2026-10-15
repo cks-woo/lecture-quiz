@@ -10,10 +10,20 @@
   </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
-  <!-- KaTeX 수식 렌더러 CDN -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <!-- MathJax 3 수식 렌더러 (LaTeX 역슬래시 자동 교정 및 완벽 호환) -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)'], ['\\\\(', '\\\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]'], ['\\\\[', '\\\\]']],
+        processEscapes: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
@@ -21,7 +31,7 @@
     .custom-scrollbar::-webkit-scrollbar { width: 5px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-    .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
+    mjx-container { outline: none !important; margin: 0 !important; }
   </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 antialiased min-h-screen flex flex-col md:flex-row transition-colors duration-150">
@@ -197,7 +207,6 @@
           <p id="explanationText" class="text-xs text-zinc-400 leading-relaxed"></p>
         </div>
 
-        <!-- 하단 조작 버튼 -->
         <div class="flex items-center justify-between mt-6 pt-4 border-t border-zinc-800">
           <button id="prevQuestionBtn" type="button" class="text-xs font-medium text-zinc-500 hover:text-zinc-200 disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1">
             <i class="fa-solid fa-arrow-left"></i>
@@ -313,55 +322,26 @@
       timerInterval: null
     };
 
-    // LaTeX 중복 역슬래시 및 단독 기호 자동 감싸기 정규화 함수
+    // LaTeX 중복 역슬래시만 간단히 정규화 (수식 내부를 파괴하지 않음)
     function cleanLatexDelimiters(text) {
       if (!text) return '';
-      let s = String(text)
-        .replace(/\\{2,}\(/g, '\\(')
-        .replace(/\\{2,}\)/g, '\\)')
-        .replace(/\\{2,}\[/g, '\\[')
-        .replace(/\\{2,}\]/g, '\\]');
-
-      // 괄호 안에 단독 LaTeX 명령어가 포함된 경우: (\Omega, \mathcal{F}, P) -> \(\Omega, \mathcal{F}, P\)
-      s = s.replace(/\(([^()\n]*\\[a-zA-Z]+[^()\n]*)\)/g, (match, inner) => {
-        return `\\(${inner}\\)`;
-      });
-
-      // 단독으로 노출된 전형적 LaTeX 기호 감싸기
-      const rawMathPattern = /(\\mathcal\{[A-Za-z]+\}|\\(?:Omega|omega|sigma|alpha|beta|theta|lambda|mu|pi|cap|cup|in|subset|times|le|ge|ne|approx)(?:-[a-zA-Z]+)?)/g;
-      s = s.replace(rawMathPattern, (match) => {
-        return `\\(${match}\\)`;
-      });
-
-      // 연이은 구분자 병합
-      s = s.replace(/\\\)\s*\\\(/g, ' ');
-
+      let s = String(text);
+      // \\( -> \(,  \\) -> \)
+      s = s.replace(/\\{2,}\(/g, '\\(').replace(/\\{2,}\)/g, '\\)');
+      s = s.replace(/\\{2,}\[/g, '\\[').replace(/\\{2,}\]/g, '\\]');
+      
+      // 구분자 없이 단독으로 쓰인 그리스 문자나 기호만 안전하게 $...$로 포장
+      // (이미 \로 시작하는 수식 괄호 안이 아닐 때만 적용)
+      s = s.replace(/(^|[^\\$\w])\\(Omega|omega|sigma|alpha|beta|theta|lambda|mu|pi|mathcal\{[A-Za-z]+\})(?!\w)/g, '$1$\\$2$');
+      
       return s;
     }
 
-    // KaTeX 안전 렌더링 함수
-    function renderMathInElementSafely(el) {
-      if (!el) return;
-      if (typeof renderMathInElement === 'function') {
-        try {
-          renderMathInElement(el, {
-            delimiters: [
-              { left: '$$', right: '$$', display: true },
-              { left: '$', right: '$', display: false },
-              { left: '\\(', right: '\\)', display: false },
-              { left: '[', right: ']', display: true }
-            ],
-            throwOnError: false
-          });
-        } catch (e) {
-          console.warn("KaTeX 렌더링 중 오류:", e);
-        }
-      } else {
-        setTimeout(() => {
-          if (typeof renderMathInElement === 'function') {
-            renderMathInElementSafely(el);
-          }
-        }, 150);
+    // MathJax 3 비동기 렌더링 호출
+    function renderMathSafely(containerEl) {
+      if (!containerEl) return;
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([containerEl]).catch(err => console.warn('MathJax error:', err));
       }
     }
 
@@ -724,7 +704,8 @@
       document.getElementById('prevQuestionBtn').disabled = (state.currentIndex === 0);
       document.getElementById('nextBtnText').innerText = (state.currentIndex === total - 1) ? "결과 보기" : "다음 문제";
 
-      renderMathInElementSafely(document.getElementById('questionCard'));
+      // MathJax 3 렌더링 호출
+      renderMathSafely(document.getElementById('questionCard'));
     }
 
     function selectOption(index) {
@@ -896,6 +877,7 @@
         reader.readAsText(file);
       };
 
+      // 대량 파싱 (TSV 한 줄 형식 + 기존 줄글 형식 동시 지원)
       document.getElementById('parseInputBtn').onclick = () => {
         const text = document.getElementById('rawQuestionInput').value.trim();
         if (!text) return alert("붙여넣은 내용이 없습니다.");
@@ -913,10 +895,15 @@
           lines.forEach(line => {
             const cols = line.split('\t').map(c => c.trim());
             if (cols.length >= 6) {
-              const prompt = cols[0];
-              const options = [cols[1], cols[2], cols[3], cols[4]];
+              const prompt = cleanLatexDelimiters(cols[0]);
+              const options = [
+                cleanLatexDelimiters(cols[1]),
+                cleanLatexDelimiters(cols[2]),
+                cleanLatexDelimiters(cols[3]),
+                cleanLatexDelimiters(cols[4])
+              ];
               const answerNum = parseInt(cols[5].match(/\d/)?.[0] || "1", 10) - 1;
-              const explanation = cols[6] || "상세 해설 없음";
+              const explanation = cleanLatexDelimiters(cols[6] || "상세 해설 없음");
 
               week.questions.push({
                 id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
@@ -936,19 +923,19 @@
             const bLines = block.split('\n').map(l => l.trim()).filter(Boolean);
             if (bLines.length < 5) return;
 
-            let prompt = bLines[0].replace(/^\d+[\.\)]\s*/, '');
+            let prompt = cleanLatexDelimiters(bLines[0].replace(/^\d+[\.\)]\s*/, ''));
             let options = [];
             let answer = 0;
             let explanation = "";
 
             bLines.slice(1).forEach(l => {
               if (/^[①②③④1-4][\.\)]?\s*/.test(l)) {
-                options.push(l.replace(/^[①②③④1-4][\.\)]?\s*/, ''));
+                options.push(cleanLatexDelimiters(l.replace(/^[①②③④1-4][\.\)]?\s*/, '')));
               } else if (l.includes('정답:')) {
                 const numMatch = l.match(/\d/);
                 if (numMatch) answer = parseInt(numMatch[0]) - 1;
               } else if (l.includes('해설:')) {
-                explanation = l.replace(/.*해설:\s*/, '');
+                explanation = cleanLatexDelimiters(l.replace(/.*해설:\s*/, '');
               }
             });
 
@@ -958,7 +945,7 @@
                 prompt,
                 options,
                 answer: Math.max(0, Math.min(answer, options.length - 1)),
-                explanation,
+                explanation: explanation || "상세 해설 없음",
                 bookmarked: false,
                 wrongCount: 0
               });
