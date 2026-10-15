@@ -14,8 +14,8 @@
   <script>
     window.MathJax = {
       tex: {
-        inlineMath: [['$', '$'], ['\\(', '\\)'], ['\\\\(', '\\\\)']],
-        displayMath: [['$$', '$$'], ['\\[', '\\]'], ['\\\\[', '\\\\]']],
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
         processEscapes: true
       },
       options: {
@@ -31,7 +31,7 @@
     .custom-scrollbar::-webkit-scrollbar { width: 5px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-    mjx-container { outline: none !important; margin: 0 2px !important; display: inline-block !important; }
+    mjx-container { outline: none !important; margin: 0 1px !important; display: inline-block !important; }
   </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 antialiased min-h-screen flex flex-col md:flex-row transition-colors duration-150">
@@ -322,47 +322,45 @@
       timerInterval: null
     };
 
-    // [핵심] 수식을 파괴하지 않고 정확하게 포장하는 스마트 전처리 함수
-    function cleanLatexDelimiters(text) {
-      if (!text) return '';
-      let s = String(text);
+    // [전면 개편] JSON 원본 수식을 100% 안전하게 포장하는 스마트 렌더러 전처리
+    function prepareMathString(raw) {
+      if (!raw) return '';
+      let s = String(raw);
 
-      // 1. 역슬래시 중복 정규화
+      // 1. 역슬래시 중복 축약 (\\\\( -> \( 등)
       s = s.replace(/\\{2,}\(/g, '\\(').replace(/\\{2,}\)/g, '\\)');
       s = s.replace(/\\{2,}\[/g, '\\[').replace(/\\{2,}\]/g, '\\]');
 
-      // 2. 이미 \( ... \) 나 $ ... $ 로 감싸진 영역은 일시 마스킹하여 내부 수식 파괴 방지
-      const mathTokens = [];
-      s = s.replace(/\\\(.+?\\\)|\$.+?\$|\\\[.+?\\\]/gs, (match) => {
-        const id = `__MATH_TOKEN_${mathTokens.length}__`;
-        mathTokens.push(match);
-        return id;
+      // 2. 이미 \(...\), $...$, \[...\] 로 둘러싸인 구역은 보존
+      const preserved = [];
+      s = s.replace(/\\\(.*?\\\)|\$.*?\$|\\\[.*?\\\]/gs, match => {
+        const token = `###PRESERVED_MATH_${preserved.length}###`;
+        preserved.push(match);
+        return token;
       });
 
-      // 3. 감싸지지 않은 채 노출된 온전한 수식 덩어리들을 \(...\) 로 포장
-      // (1) 등호나 부등호가 포함된 LaTeX 복합식: P(A|B) = \frac{...}{...}, Cov(X,Y) = ...
-      s = s.replace(/([A-Za-z0-9_()|\s,]+=(?:[A-Za-z0-9_()|\s,+\-*/^]|\\(?:frac|sum|prod|int|cap|cup|mid|sigma|mu|lambda|theta|rho|Omega|omega|emptyset|mathcal\{[A-Za-z]+\}|mathbb\{[A-Za-z]+\})\{?[A-Za-z0-9_]*\}?)+)/g, (match) => {
-        if (match.includes('\\') || match.includes('=')) {
-          return `\\(${match.trim()}\\)`;
+      // 3. 둘러싸이지 않고 노출된 LaTeX 수식/기호들을 \(...\) 로 정확히 포장
+      // (1) \frac, \sum, \int, \bigcup, \bigcap, \mid, \cap, \cup, \emptyset, \rightarrow 등 수식 구문
+      s = s.replace(/((?:[A-Za-z0-9_()|\s,=\+\-\*\/^]*)?\\(?:frac|sum|prod|int|bigcup|bigcap|cap|cup|mid|rightarrow|leftarrow|emptyset|in|subset|times|le|ge|ne|approx|sim|mathcal|mathbb|Omega|omega|sigma|alpha|beta|theta|lambda|mu|rho|tau|pi)(?:\{[^}]*\}|\[[^\]]*\]|\^[0-9a-zA-Z_]+|_[0-9a-zA-Z_]+|[A-Za-z0-9_()|\s,=\+\-\*\/^])*)/g, (match) => {
+        const trimmed = match.trim();
+        if (!trimmed || !trimmed.includes('\\')) return match;
+        // 한글 조사 분리 (예: \mathbb{R}의 -> \(\mathbb{R}\)의)
+        const koreanSuffix = trimmed.match(/[가-힣]+$/);
+        if (koreanSuffix) {
+          const core = trimmed.slice(0, -koreanSuffix[0].length).trim();
+          return ` \\(${core}\\)${koreanSuffix[0]} `;
         }
-        return match;
+        return ` \\(${trimmed}\\) `;
       });
 
-      // (2) LaTeX 명령어로 시작하거나 연결된 독립 표현식: \frac{...}{...}, P(A \cap B), A \cap B = \emptyset 등
-      s = s.replace(/((?:[A-Za-z0-9_()]+\s*)?\\(?:frac\{.+?\}\{.+?\}|bigcap|bigcup|cap|cup|mid|rightarrow|sim|le|ge|ne|approx|in|subset)(?:\s*[A-Za-z0-9_()\\{}]+)*)/g, (match) => {
-        return `\\(${match.trim()}\\)`;
+      // 4. 보존해 둔 기존 정상 수식 토큰 복원
+      preserved.forEach((orig, idx) => {
+        s = s.replace(`###PRESERVED_MATH_${idx}###`, orig);
       });
 
-      // (3) 단독 그리스 문자 및 수학 집합 기호 (\Omega, \omega, \theta, \lambda, \sigma, \mu, \mathbb{R}, \mathcal{F}, \emptyset 등)
-      s = s.replace(/\\(Omega|omega|theta|lambda|mu|pi|sigma|alpha|beta|emptyset|mathcal\{[A-Za-z]+\}|mathbb\{[A-Za-z]+\})(?![A-Za-z])/g, '\\(\\$1\\)');
-
-      // 4. 마스킹해둔 원래 수식 복원
-      mathTokens.forEach((token, idx) => {
-        s = s.replace(`__MATH_TOKEN_${idx}__`, token);
-      });
-
-      // 5. 중복 감싸기(\(\(...\)\)) 정리
+      // 5. 중복 감싸기(\(\(...\)\)) 및 연속 공백 정리
       s = s.replace(/\\\(+\s*/g, '\\(').replace(/\s*\\\)+/g, '\\)');
+      s = s.replace(/[ ]{2,}/g, ' ');
 
       return s;
     }
@@ -668,7 +666,7 @@
       document.getElementById('quizCounter').innerText = `${state.currentIndex + 1} / ${total}`;
       
       const promptEl = document.getElementById('currentQuestionPrompt');
-      promptEl.textContent = `${state.currentIndex + 1}. ${cleanLatexDelimiters(q.prompt)}`;
+      promptEl.textContent = `${state.currentIndex + 1}. ${prepareMathString(q.prompt)}`;
 
       document.getElementById('bookmarkToggleBtn').innerHTML = `<i class="fa-${q.bookmarked ? 'solid text-amber-400' : 'regular'} fa-star text-base pointer-events-none"></i>`;
 
@@ -714,7 +712,7 @@
           ${hasAnswered && idx === selectedIndex && idx !== q.answer ? '<i class="fa-solid fa-xmark text-rose-400 text-sm pointer-events-none ml-2"></i>' : ''}
         `;
 
-        btn.querySelector('.option-content').textContent = cleanLatexDelimiters(opt);
+        btn.querySelector('.option-content').textContent = prepareMathString(opt);
 
         if (!hasAnswered) {
           btn.onclick = () => selectOption(idx);
@@ -725,7 +723,7 @@
       const expBox = document.getElementById('explanationBox');
       const expTextEl = document.getElementById('explanationText');
       if (hasAnswered) {
-        expTextEl.textContent = cleanLatexDelimiters(q.explanation || "제공된 해설이 없습니다.");
+        expTextEl.textContent = prepareMathString(q.explanation || "제공된 해설이 없습니다.");
         expBox.classList.remove('hidden');
       } else {
         expBox.classList.add('hidden');
@@ -924,15 +922,10 @@
           lines.forEach(line => {
             const cols = line.split('\t').map(c => c.trim());
             if (cols.length >= 6) {
-              const prompt = cleanLatexDelimiters(cols[0]);
-              const options = [
-                cleanLatexDelimiters(cols[1]),
-                cleanLatexDelimiters(cols[2]),
-                cleanLatexDelimiters(cols[3]),
-                cleanLatexDelimiters(cols[4])
-              ];
+              const prompt = cols[0];
+              const options = [cols[1], cols[2], cols[3], cols[4]];
               const answerNum = parseInt(cols[5].match(/\d/)?.[0] || "1", 10) - 1;
-              const explanation = cleanLatexDelimiters(cols[6] || "상세 해설 없음");
+              const explanation = cols[6] || "상세 해설 없음";
 
               week.questions.push({
                 id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
@@ -952,19 +945,19 @@
             const bLines = block.split('\n').map(l => l.trim()).filter(Boolean);
             if (bLines.length < 5) return;
 
-            let prompt = cleanLatexDelimiters(bLines[0].replace(/^\d+[\.\)]\s*/, ''));
+            let prompt = bLines[0].replace(/^\d+[\.\)]\s*/, '');
             let options = [];
             let answer = 0;
             let explanation = "";
 
             bLines.slice(1).forEach(l => {
               if (/^[①②③④1-4][\.\)]?\s*/.test(l)) {
-                options.push(cleanLatexDelimiters(l.replace(/^[①②③④1-4][\.\)]?\s*/, '')));
+                options.push(l.replace(/^[①②③④1-4][\.\)]?\s*/, ''));
               } else if (l.includes('정답:')) {
                 const numMatch = l.match(/\d/);
                 if (numMatch) answer = parseInt(numMatch[0]) - 1;
               } else if (l.includes('해설:')) {
-                explanation = cleanLatexDelimiters(l.replace(/.*해설:\s*/, ''));
+                explanation = l.replace(/.*해설:\s*/, '');
               }
             });
 
