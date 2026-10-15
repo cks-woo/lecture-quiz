@@ -842,60 +842,88 @@
         reader.readAsText(file);
       };
 
-      // 문제 대량 파싱
+      // 대량 파싱 (TSV 한 줄 형식 + 기존 줄글 형식 동시 지원)
       document.getElementById('parseInputBtn').onclick = () => {
         const text = document.getElementById('rawQuestionInput').value.trim();
-        if (!text) return alert("붙여넣은 퀴즈 내용이 없습니다.");
+        if (!text) return alert("붙여넣은 내용이 없습니다.");
 
         const course = state.courses.find(c => c.id === state.currentCourseId);
         const week = course ? (course.weeks || []).find(w => w.id === state.currentWeekId) : null;
-        if (!week) return alert("문제를 추가할 주차를 먼저 생성하거나 선택하세요.");
+        if (!week) return alert("문제를 추가할 주차를 먼저 선택하거나 생성하세요.");
 
-        const blocks = text.split(/\n\s*(?=\d+[\.\)])/g);
         let added = 0;
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-        blocks.forEach(block => {
-          const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-          if (lines.length < 5) return;
+        // 1. TSV (Tab 구분 단일 라인) 파싱 시도
+        const isTSV = lines.some(l => l.split('\t').length >= 6);
 
-          let prompt = lines[0].replace(/^\d+[\.\)]\s*/, '');
-          let options = [];
-          let answer = 0;
-          let explanation = "";
+        if (isTSV) {
+          lines.forEach(line => {
+            const cols = line.split('\t').map(c => c.trim());
+            if (cols.length >= 6) {
+              const prompt = cols[0];
+              const options = [cols[1], cols[2], cols[3], cols[4]];
+              const answerNum = parseInt(cols[5].match(/\d/)?.[0] || "1", 10) - 1;
+              const explanation = cols[6] || "상세 해설 없음";
 
-          lines.slice(1).forEach(l => {
-            if (/^[①②③④1-4][\.\)]?\s*/.test(l)) {
-              options.push(l.replace(/^[①②③④1-4][\.\)]?\s*/, ''));
-            } else if (l.includes('정답:')) {
-              const numMatch = l.match(/\d/);
-              if (numMatch) answer = parseInt(numMatch[0]) - 1;
-            } else if (l.includes('해설:')) {
-              explanation = l.replace(/.*해설:\s*/, '');
+              week.questions.push({
+                id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                prompt,
+                options,
+                answer: Math.max(0, Math.min(answerNum, 3)),
+                explanation,
+                bookmarked: false,
+                wrongCount: 0
+              });
+              added++;
             }
           });
+        } else {
+          // 2. 기존 다중 라인 형식 파싱
+          const blocks = text.split(/\n\s*(?=\d+[\.\)])/g);
+          blocks.forEach(block => {
+            const bLines = block.split('\n').map(l => l.trim()).filter(Boolean);
+            if (bLines.length < 5) return;
 
-          if (options.length >= 2) {
-            week.questions.push({
-              id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-              prompt,
-              options,
-              answer: Math.max(0, Math.min(answer, options.length - 1)),
-              explanation: explanation || "상세 해설 없음",
-              bookmarked: false,
-              wrongCount: 0
+            let prompt = bLines[0].replace(/^\d+[\.\)]\s*/, '');
+            let options = [];
+            let answer = 0;
+            let explanation = "";
+
+            bLines.slice(1).forEach(l => {
+              if (/^[①②③④1-4][\.\)]?\s*/.test(l)) {
+                options.push(l.replace(/^[①②③④1-4][\.\)]?\s*/, ''));
+              } else if (l.includes('정답:')) {
+                const numMatch = l.match(/\d/);
+                if (numMatch) answer = parseInt(numMatch[0]) - 1;
+              } else if (l.includes('해설:')) {
+                explanation = l.replace(/.*해설:\s*/, '');
+              }
             });
-            added++;
-          }
-        });
+
+            if (options.length >= 2) {
+              week.questions.push({
+                id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                prompt,
+                options,
+                answer: Math.max(0, Math.min(answer, options.length - 1)),
+                explanation: explanation || "상세 해설 없음",
+                bookmarked: false,
+                wrongCount: 0
+              });
+              added++;
+            }
+          });
+        }
 
         if (added > 0) {
           saveState();
           renderDashboard();
           renderSidebar();
           document.getElementById('rawQuestionInput').value = '';
-          alert(`${added}개의 문제가 성공적으로 추가되었습니다!`);
+          alert(`${added}개의 문제가 성공적으로 등록되었습니다!`);
         } else {
-          alert("문제를 파싱하지 못했습니다. 형식을 확인하세요.");
+          alert("문제를 인식하지 못했습니다. TSV(탭 구분) 또는 번호/보기 형식을 확인하세요.");
         }
       };
 
