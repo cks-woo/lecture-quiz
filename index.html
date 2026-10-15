@@ -9,12 +9,20 @@
     tailwind.config = { darkMode: 'class' };
   </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- KaTeX 수식 렌더러 CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
     body { font-family: 'Pretendard', sans-serif; -webkit-tap-highlight-color: transparent; }
     .custom-scrollbar::-webkit-scrollbar { width: 5px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    /* KaTeX 수식 줄바꿈 및 여백 최적화 */
+    .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
   </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 antialiased min-h-screen flex flex-col md:flex-row transition-colors duration-150">
@@ -170,7 +178,7 @@
         </div>
       </div>
 
-      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 md:p-8 shadow-sm flex-1 flex flex-col justify-between">
+      <div id="questionCard" class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 md:p-8 shadow-sm flex-1 flex flex-col justify-between">
         <div>
           <div class="text-[11px] font-bold text-zinc-400 mb-2 uppercase tracking-wider" id="currentQuestionOrigin">
             과목 • 주차
@@ -304,6 +312,26 @@
       timerSeconds: 0,
       timerInterval: null
     };
+
+    // KaTeX 안전 렌더링 함수
+    function renderMathInElementSafely(el) {
+      if (!el) return;
+      if (typeof renderMathInElement === 'function') {
+        try {
+          renderMathInElement(el, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+          });
+        } catch (e) {
+          console.warn("KaTeX 렌더링 중 오류:", e);
+        }
+      }
+    }
 
     // 1. 테마 적용 함수
     function applyTheme(theme) {
@@ -638,7 +666,7 @@
         btn.innerHTML = `
           <div class="flex items-center space-x-3 pointer-events-none">
             <span class="w-6 h-6 rounded-md ${numBg} flex items-center justify-center text-xs font-bold font-mono">${idx + 1}</span>
-            <span>${opt}</span>
+            <span class="option-text">${opt}</span>
           </div>
           ${hasAnswered && idx === q.answer ? '<i class="fa-solid fa-check text-emerald-400 text-sm pointer-events-none"></i>' : ''}
           ${hasAnswered && idx === selectedIndex && idx !== q.answer ? '<i class="fa-solid fa-xmark text-rose-400 text-sm pointer-events-none"></i>' : ''}
@@ -660,6 +688,9 @@
 
       document.getElementById('prevQuestionBtn').disabled = (state.currentIndex === 0);
       document.getElementById('nextBtnText').innerText = (state.currentIndex === total - 1) ? "결과 보기" : "다음 문제";
+
+      // KaTeX 수식 렌더링 적용 (지문, 선택지, 해설 박스 일괄 처리)
+      renderMathInElementSafely(document.getElementById('questionCard'));
     }
 
     function selectOption(index) {
@@ -907,7 +938,7 @@
                 prompt,
                 options,
                 answer: Math.max(0, Math.min(answer, options.length - 1)),
-                explanation: explanation || "상세 해설 없음",
+                explanation,
                 bookmarked: false,
                 wrongCount: 0
               });
