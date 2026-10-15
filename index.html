@@ -10,7 +10,7 @@
   </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
-  <!-- KaTeX 수식 렌더러 CDN (동기 로드로 안정성 확보) -->
+  <!-- KaTeX 수식 렌더러 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
@@ -161,7 +161,7 @@
       </div>
     </section>
 
-    <!-- 퀴즈 풀이 화면 -->
+    <!-- 퀴즈 풀이 화면 (자연스러운 높이로 수정) -->
     <section id="quizPlayView" class="hidden flex-1 flex flex-col p-4 md:p-8 max-w-3xl mx-auto w-full">
       <div class="flex items-center justify-between mb-6 pb-4 border-b border-zinc-800">
         <button id="exitQuizBtn" type="button" class="text-xs font-semibold text-zinc-400 hover:text-zinc-200 flex items-center space-x-1">
@@ -177,7 +177,8 @@
         </div>
       </div>
 
-      <div id="questionCard" class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 md:p-8 shadow-sm flex-1 flex flex-col justify-between">
+      <!-- 문제 카드 영역 (flex-1, justify-between 제거로 컨텐츠 맞춤형 높이 적용) -->
+      <div id="questionCard" class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 md:p-8 shadow-sm flex flex-col">
         <div>
           <div class="text-[11px] font-bold text-zinc-400 mb-2 uppercase tracking-wider" id="currentQuestionOrigin">
             과목 • 주차
@@ -196,7 +197,8 @@
           <p id="explanationText" class="text-xs text-zinc-400 leading-relaxed"></p>
         </div>
 
-        <div class="flex items-center justify-between mt-8 pt-4 border-t border-zinc-800">
+        <!-- 버튼 영역: 보기/해설 바로 밑에 자연스럽게 연결 -->
+        <div class="flex items-center justify-between mt-6 pt-4 border-t border-zinc-800">
           <button id="prevQuestionBtn" type="button" class="text-xs font-medium text-zinc-500 hover:text-zinc-200 disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1">
             <i class="fa-solid fa-arrow-left"></i>
             <span>이전 (←)</span>
@@ -311,7 +313,6 @@
       timerInterval: null
     };
 
-    // LaTeX 중복 역슬래시 정규화 함수 (핵심 수정)
     function cleanLatexDelimiters(text) {
       if (!text) return '';
       return String(text)
@@ -321,7 +322,6 @@
         .replace(/\\{2,}\]/g, '\\]');
     }
 
-    // KaTeX 안전 렌더링 함수
     function renderMathInElementSafely(el) {
       if (!el) return;
       if (typeof renderMathInElement === 'function') {
@@ -639,7 +639,6 @@
 
       document.getElementById('quizCounter').innerText = `${state.currentIndex + 1} / ${total}`;
       
-      // LaTeX 정규화 적용 후 텍스트 노드로 안전 배치
       const promptEl = document.getElementById('currentQuestionPrompt');
       promptEl.textContent = `${state.currentIndex + 1}. ${cleanLatexDelimiters(q.prompt)}`;
 
@@ -687,7 +686,6 @@
           ${hasAnswered && idx === selectedIndex && idx !== q.answer ? '<i class="fa-solid fa-xmark text-rose-400 text-sm pointer-events-none ml-2"></i>' : ''}
         `;
 
-        // 보기 텍스트에 LaTeX 정규화 적용
         btn.querySelector('.option-content').textContent = cleanLatexDelimiters(opt);
 
         if (!hasAnswered) {
@@ -708,7 +706,6 @@
       document.getElementById('prevQuestionBtn').disabled = (state.currentIndex === 0);
       document.getElementById('nextBtnText').innerText = (state.currentIndex === total - 1) ? "결과 보기" : "다음 문제";
 
-      // 지문, 보기, 해설 전체에 KaTeX 수식 변환 일괄 적용
       renderMathInElementSafely(document.getElementById('questionCard'));
     }
 
@@ -881,7 +878,6 @@
         reader.readAsText(file);
       };
 
-      // 대량 파싱 (TSV 한 줄 형식 + 기존 줄글 형식 동시 지원)
       document.getElementById('parseInputBtn').onclick = () => {
         const text = document.getElementById('rawQuestionInput').value.trim();
         if (!text) return alert("붙여넣은 내용이 없습니다.");
@@ -949,7 +945,7 @@
                 prompt,
                 options,
                 answer: Math.max(0, Math.min(answer, options.length - 1)),
-                explanation: explanation || "상세 해설 없음",
+                explanation,
                 bookmarked: false,
                 wrongCount: 0
               });
