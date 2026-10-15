@@ -10,10 +10,10 @@
   </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
-  <!-- KaTeX 수식 렌더러 CDN -->
+  <!-- KaTeX 수식 렌더러 CDN (동기 로드로 안정성 확보) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
@@ -21,7 +21,6 @@
     .custom-scrollbar::-webkit-scrollbar { width: 5px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-    /* KaTeX 수식 줄바꿈 및 여백 최적화 */
     .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
   </style>
 </head>
@@ -269,7 +268,6 @@
   </div>
 
   <script>
-    // 0. Fallback 기본 데이터 (JSON 로드 실패 시 무조건 정상 작동하도록 보호)
     const DEFAULT_COURSES = [
       {
         id: "os",
@@ -313,6 +311,16 @@
       timerInterval: null
     };
 
+    // LaTeX 중복 역슬래시 정규화 함수 (핵심 수정)
+    function cleanLatexDelimiters(text) {
+      if (!text) return '';
+      return String(text)
+        .replace(/\\{2,}\(/g, '\\(')
+        .replace(/\\{2,}\)/g, '\\)')
+        .replace(/\\{2,}\[/g, '\\[')
+        .replace(/\\{2,}\]/g, '\\]');
+    }
+
     // KaTeX 안전 렌더링 함수
     function renderMathInElementSafely(el) {
       if (!el) return;
@@ -330,10 +338,15 @@
         } catch (e) {
           console.warn("KaTeX 렌더링 중 오류:", e);
         }
+      } else {
+        setTimeout(() => {
+          if (typeof renderMathInElement === 'function') {
+            renderMathInElementSafely(el);
+          }
+        }, 150);
       }
     }
 
-    // 1. 테마 적용 함수
     function applyTheme(theme) {
       const isDark = (theme === 'dark');
       if (isDark) {
@@ -357,14 +370,12 @@
       renderDashboard();
     }
 
-    // 2. 안전한 상태 저장
     function saveState() {
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ courses: state.courses }));
       } catch(e) { console.error("로컬 저장소 저장 실패", e); }
     }
 
-    // 3. 사이드바 및 대시보드 렌더링 (null 가드 포함)
     function renderSidebar() {
       const isDark = document.documentElement.classList.contains('dark');
       const tree = document.getElementById('courseTree');
@@ -582,7 +593,6 @@
       updatePromptModalText();
     }
 
-    // 4. 퀴즈 엔진
     function startQuiz(mode) {
       const course = state.courses.find(c => c.id === state.currentCourseId);
       if (!course) return alert("선택된 과목이 없습니다.");
@@ -628,7 +638,11 @@
       const total = state.activeQuizList.length;
 
       document.getElementById('quizCounter').innerText = `${state.currentIndex + 1} / ${total}`;
-      document.getElementById('currentQuestionPrompt').innerText = `${state.currentIndex + 1}. ${q.prompt}`;
+      
+      // LaTeX 정규화 적용 후 텍스트 노드로 안전 배치
+      const promptEl = document.getElementById('currentQuestionPrompt');
+      promptEl.textContent = `${state.currentIndex + 1}. ${cleanLatexDelimiters(q.prompt)}`;
+
       document.getElementById('bookmarkToggleBtn').innerHTML = `<i class="fa-${q.bookmarked ? 'solid text-amber-400' : 'regular'} fa-star text-base pointer-events-none"></i>`;
 
       const container = document.getElementById('optionsContainer');
@@ -663,14 +677,18 @@
 
         btn.className = styleClasses;
         const numBg = isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-slate-100 text-slate-600';
+        
         btn.innerHTML = `
-          <div class="flex items-center space-x-3 pointer-events-none">
-            <span class="w-6 h-6 rounded-md ${numBg} flex items-center justify-center text-xs font-bold font-mono">${idx + 1}</span>
-            <span class="option-text">${opt}</span>
+          <div class="flex items-center space-x-3 pointer-events-none flex-1">
+            <span class="w-6 h-6 rounded-md ${numBg} flex items-center justify-center text-xs font-bold font-mono shrink-0">${idx + 1}</span>
+            <span class="option-content"></span>
           </div>
-          ${hasAnswered && idx === q.answer ? '<i class="fa-solid fa-check text-emerald-400 text-sm pointer-events-none"></i>' : ''}
-          ${hasAnswered && idx === selectedIndex && idx !== q.answer ? '<i class="fa-solid fa-xmark text-rose-400 text-sm pointer-events-none"></i>' : ''}
+          ${hasAnswered && idx === q.answer ? '<i class="fa-solid fa-check text-emerald-400 text-sm pointer-events-none ml-2"></i>' : ''}
+          ${hasAnswered && idx === selectedIndex && idx !== q.answer ? '<i class="fa-solid fa-xmark text-rose-400 text-sm pointer-events-none ml-2"></i>' : ''}
         `;
+
+        // 보기 텍스트에 LaTeX 정규화 적용
+        btn.querySelector('.option-content').textContent = cleanLatexDelimiters(opt);
 
         if (!hasAnswered) {
           btn.onclick = () => selectOption(idx);
@@ -679,8 +697,9 @@
       });
 
       const expBox = document.getElementById('explanationBox');
+      const expTextEl = document.getElementById('explanationText');
       if (hasAnswered) {
-        document.getElementById('explanationText').innerText = q.explanation || "제공된 해설이 없습니다.";
+        expTextEl.textContent = cleanLatexDelimiters(q.explanation || "제공된 해설이 없습니다.");
         expBox.classList.remove('hidden');
       } else {
         expBox.classList.add('hidden');
@@ -689,7 +708,7 @@
       document.getElementById('prevQuestionBtn').disabled = (state.currentIndex === 0);
       document.getElementById('nextBtnText').innerText = (state.currentIndex === total - 1) ? "결과 보기" : "다음 문제";
 
-      // KaTeX 수식 렌더링 적용 (지문, 선택지, 해설 박스 일괄 처리)
+      // 지문, 보기, 해설 전체에 KaTeX 수식 변환 일괄 적용
       renderMathInElementSafely(document.getElementById('questionCard'));
     }
 
@@ -740,7 +759,6 @@
       document.getElementById('resScorePct').innerText = `${pct}%`;
     }
 
-    // 5. 프롬프트 업데이트
     function updatePromptModalText() {
       const course = state.courses.find(c => c.id === state.currentCourseId);
       const cName = course ? course.name : "과목";
@@ -760,25 +778,20 @@
       document.getElementById('promptTemplateArea').innerText = prompt;
     }
 
-    // 6. 모든 기본 버튼 이벤트 리스너를 '즉시' 등록
     function setupEventListeners() {
-      // 테마 토글
       document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
       document.getElementById('mobileThemeToggleBtn').addEventListener('click', toggleTheme);
 
-      // 모바일 서랍
       const sidebar = document.getElementById('sidebar');
       const overlay = document.getElementById('drawerOverlay');
       document.getElementById('mobileMenuBtn').onclick = () => { sidebar.classList.remove('-translate-x-full'); overlay.classList.remove('hidden'); };
       document.getElementById('closeDrawerBtn').onclick = () => { sidebar.classList.add('-translate-x-full'); overlay.classList.add('hidden'); };
       overlay.onclick = () => { sidebar.classList.add('-translate-x-full'); overlay.classList.add('hidden'); };
 
-      // 대시보드 모드 버튼
       document.getElementById('startCurrentWeekBtn').onclick = () => startQuiz('currentWeek');
       document.getElementById('startAllWeeksBtn').onclick = () => startQuiz('allWeeks');
       document.getElementById('startWrongReviewBtn').onclick = () => startQuiz('wrongOnly');
 
-      // 퀴즈 조작 버튼
       document.getElementById('exitQuizBtn').onclick = () => {
         clearInterval(state.timerInterval);
         document.getElementById('quizPlayView').classList.add('hidden');
@@ -809,17 +822,14 @@
         renderCurrentQuestion();
       };
 
-      // 결과 화면 버튼
       document.getElementById('backToDashBtn').onclick = () => {
         document.getElementById('resultView').classList.add('hidden');
         document.getElementById('dashboardView').classList.remove('hidden');
       };
       document.getElementById('retryWrongOnlyBtn').onclick = () => startQuiz('wrongOnly');
 
-      // 수동 동기화
       document.getElementById('manualRefreshBtn').onclick = () => syncData(true);
 
-      // 과목 추가
       document.getElementById('addCourseBtn').onclick = () => {
         const name = prompt("새 과목명을 입력하세요 (예: 컴퓨터네트워크):");
         if (name && name.trim()) {
@@ -833,7 +843,6 @@
         }
       };
 
-      // 프롬프트 모달
       document.getElementById('openPromptModalBtn').onclick = () => document.getElementById('promptModal').classList.remove('hidden');
       document.getElementById('closePromptModal').onclick = () => document.getElementById('promptModal').classList.add('hidden');
       document.getElementById('copyPromptBtn').onclick = () => {
@@ -842,7 +851,6 @@
         document.getElementById('promptModal').classList.add('hidden');
       };
 
-      // JSON 백업/복원
       document.getElementById('exportJsonBtn').onclick = () => {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ courses: state.courses }, null, 2));
         const a = document.createElement('a');
@@ -885,17 +893,21 @@
         let added = 0;
         const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-        // 1. TSV (Tab 구분 단일 라인) 파싱 시도
         const isTSV = lines.some(l => l.split('\t').length >= 6);
 
         if (isTSV) {
           lines.forEach(line => {
             const cols = line.split('\t').map(c => c.trim());
             if (cols.length >= 6) {
-              const prompt = cols[0];
-              const options = [cols[1], cols[2], cols[3], cols[4]];
+              const prompt = cleanLatexDelimiters(cols[0]);
+              const options = [
+                cleanLatexDelimiters(cols[1]),
+                cleanLatexDelimiters(cols[2]),
+                cleanLatexDelimiters(cols[3]),
+                cleanLatexDelimiters(cols[4])
+              ];
               const answerNum = parseInt(cols[5].match(/\d/)?.[0] || "1", 10) - 1;
-              const explanation = cols[6] || "상세 해설 없음";
+              const explanation = cleanLatexDelimiters(cols[6] || "상세 해설 없음");
 
               week.questions.push({
                 id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
@@ -910,25 +922,24 @@
             }
           });
         } else {
-          // 2. 기존 다중 라인 형식 파싱
           const blocks = text.split(/\n\s*(?=\d+[\.\)])/g);
           blocks.forEach(block => {
             const bLines = block.split('\n').map(l => l.trim()).filter(Boolean);
             if (bLines.length < 5) return;
 
-            let prompt = bLines[0].replace(/^\d+[\.\)]\s*/, '');
+            let prompt = cleanLatexDelimiters(bLines[0].replace(/^\d+[\.\)]\s*/, ''));
             let options = [];
             let answer = 0;
             let explanation = "";
 
             bLines.slice(1).forEach(l => {
               if (/^[①②③④1-4][\.\)]?\s*/.test(l)) {
-                options.push(l.replace(/^[①②③④1-4][\.\)]?\s*/, ''));
+                options.push(cleanLatexDelimiters(l.replace(/^[①②③④1-4][\.\)]?\s*/, '')));
               } else if (l.includes('정답:')) {
                 const numMatch = l.match(/\d/);
                 if (numMatch) answer = parseInt(numMatch[0]) - 1;
               } else if (l.includes('해설:')) {
-                explanation = l.replace(/.*해설:\s*/, '');
+                explanation = cleanLatexDelimiters(l.replace(/.*해설:\s*/, ''));
               }
             });
 
@@ -938,7 +949,7 @@
                 prompt,
                 options,
                 answer: Math.max(0, Math.min(answer, options.length - 1)),
-                explanation,
+                explanation: explanation || "상세 해설 없음",
                 bookmarked: false,
                 wrongCount: 0
               });
@@ -958,7 +969,6 @@
         }
       };
 
-      // 단축키
       window.addEventListener('keydown', (e) => {
         if (document.getElementById('quizPlayView').classList.contains('hidden')) return;
         if (['1', '2', '3', '4'].includes(e.key)) {
@@ -995,7 +1005,6 @@
       }
     }
 
-    // 7. 데이터 동기화 (GitHub fetch -> 로컬 스토리지 -> 기본값 Fallback)
     async function syncData(isManual = false) {
       const dot = document.getElementById('syncDot');
       const text = document.getElementById('syncStatusText');
@@ -1047,16 +1056,10 @@
       }
     }
 
-    // 초기 실행
     window.addEventListener('DOMContentLoaded', () => {
-      // 1. 이벤트 리스너 먼저 등록 (어떤 에러가 발생해도 버튼은 동작)
       setupEventListeners();
-
-      // 2. 테마 초기화
       const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
       applyTheme(savedTheme);
-
-      // 3. 데이터 로드
       syncData(false);
     });
   </script>
